@@ -6,14 +6,10 @@
     <title>Analytics Dashboard | Moge Campaign</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    
     <script src="https://unpkg.com/feather-icons"></script>
-    
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-    
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
 
@@ -40,7 +36,7 @@
 </head>
 <body class="antialiased">
 
-    <div id="login-screen" class="fixed inset-0 z-50 flex items-center justify-center p-4 login-bg">
+    <div id="login-screen" class="fixed inset-0 z-50 flex items-center justify-center p-4 login-bg hidden">
         <div class="w-full max-w-sm">
             <div class="bg-white/10 backdrop-blur-xl rounded-2xl shadow-2xl p-8 text-white">
                 <div class="text-center mb-8">
@@ -50,13 +46,31 @@
                 <div class="space-y-4">
                     <input type="text" id="admin-id" placeholder="Admin ID" class="w-full bg-white/20 border-0 rounded-lg px-4 py-3 placeholder-white/60 focus:ring-2 focus:ring-white/80 transition">
                     <input type="password" id="admin-password" placeholder="Password" class="w-full bg-white/20 border-0 rounded-lg px-4 py-3 placeholder-white/60 focus:ring-2 focus:ring-white/80 transition">
-                    <input type="password" id="admin-secret" placeholder="Secret Word" class="w-full bg-white/20 border-0 rounded-lg px-4 py-3 placeholder-white/60 focus:ring-2 focus:ring-white/80 transition">
                 </div>
                 <button id="login-btn" class="w-full bg-white text-blue-600 font-bold py-3 rounded-lg mt-8 hover:bg-white/90 transition-all transform hover:scale-105">Login</button>
-                <p id="login-error" class="text-red-300 mt-4 text-sm text-center font-semibold hidden">Invalid credentials. Please try again.</p>
+                <p id="login-error" class="text-red-300 mt-4 text-sm text-center font-semibold hidden"></p>
             </div>
         </div>
     </div>
+
+    <div id="register-screen" class="fixed inset-0 z-50 flex items-center justify-center p-4 login-bg hidden">
+        <div class="w-full max-w-sm">
+            <div class="bg-white/10 backdrop-blur-xl rounded-2xl shadow-2xl p-8 text-white">
+                <div class="text-center mb-8">
+                    <h1 class="text-3xl font-bold tracking-tight">Admin Registration</h1>
+                    <p class="text-white/70 mt-2">Create the first admin account.</p>
+                </div>
+                <div class="space-y-4">
+                    <input type="text" id="register-id" placeholder="Admin ID" class="w-full bg-white/20 border-0 rounded-lg px-4 py-3 placeholder-white/60 focus:ring-2 focus:ring-white/80 transition">
+                    <input type="password" id="register-password" placeholder="Password" class="w-full bg-white/20 border-0 rounded-lg px-4 py-3 placeholder-white/60 focus:ring-2 focus:ring-white/80 transition">
+                    <input type="password" id="register-confirm-password" placeholder="Confirm Password" class="w-full bg-white/20 border-0 rounded-lg px-4 py-3 placeholder-white/60 focus:ring-2 focus:ring-white/80 transition">
+                </div>
+                <button id="register-btn" class="w-full bg-white text-blue-600 font-bold py-3 rounded-lg mt-8 hover:bg-white/90 transition-all transform hover:scale-105">Register Admin</button>
+                <p id="register-error" class="text-red-300 mt-4 text-sm text-center font-semibold hidden"></p>
+            </div>
+        </div>
+    </div>
+
 
     <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-20 hidden lg:hidden"></div>
     
@@ -213,10 +227,6 @@
                                 <input type="password" id="setting-admin-password" class="w-full border-gray-300 rounded-lg text-sm" placeholder="Enter new password">
                             </div>
                             <div>
-                                <label for="setting-admin-secret" class="block text-sm font-medium text-slate-700 mb-1">New Secret Word</label>
-                                <input type="password" id="setting-admin-secret" class="w-full border-gray-300 rounded-lg text-sm" placeholder="Enter new secret word">
-                            </div>
-                            <div>
                                 <label for="setting-current-password" class="block text-sm font-medium text-slate-700 mb-1">Current Password (for confirmation)</label>
                                 <input type="password" id="setting-current-password" class="w-full border-gray-300 rounded-lg text-sm" placeholder="Enter your CURRENT password">
                             </div>
@@ -256,52 +266,37 @@
 
             // --- AUTH & PAGE STATE ---
             const loginScreen = document.getElementById('login-screen');
+            const registerScreen = document.getElementById('register-screen');
             const dashboard = document.getElementById('dashboard');
             
-            // --- SECURE HASHING & CREDENTIALS LOGIC ---
+            // --- SECURE HASHING ---
             async function hashString(str) {
                 const encoder = new TextEncoder();
                 const data = encoder.encode(str);
                 const hashBuffer = await crypto.subtle.digest('SHA-256', data);
                 const hashArray = Array.from(new Uint8Array(hashBuffer));
-                const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-                return hashHex;
+                return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
             }
 
-            async function getAdminCredentials() {
+            // --- CHECK IF ADMIN EXISTS TO DETERMINE VIEW ---
+            async function checkAdminExists() {
                 try {
                     const docRef = db.collection("admin").doc("credentials");
                     const doc = await docRef.get();
-                    if (!doc.exists) {
-                        // First-time setup with default credentials
-                        console.log("No credentials found, setting up default...");
-                        const defaultId = "admin";
-                        const defaultPass = "password123";
-                        const defaultSecret = "secret";
-
-                        const hashedPass = await hashString(defaultPass);
-                        const hashedSecret = await hashString(defaultSecret);
-
-                        await docRef.set({
-                            adminId: defaultId,
-                            passHash: hashedPass,
-                            secretHash: hashedSecret
-                        });
-                        
-                        alert("DEFAULT LOGIN SET: \nID: admin\nPass: password123\nSecret: secret\n\nPlease change these immediately in Settings.");
-                        
-                        return { adminId: defaultId, passHash: hashedPass, secretHash: hashedSecret };
+                    if (doc.exists) {
+                        loginScreen.classList.remove('hidden');
                     } else {
-                        return doc.data();
+                        registerScreen.classList.remove('hidden');
                     }
                 } catch (error) {
-                    console.error("Error getting credentials: ", error);
-                    return null;
+                    console.error("Error checking for admin:", error);
+                    alert("Could not connect to the database to check for admin account.");
                 }
             }
             
             function showDashboard() {
                 loginScreen.classList.add('hidden');
+                registerScreen.classList.add('hidden');
                 dashboard.classList.remove('hidden');
                 feather.replace();
                 initializeDashboard();
@@ -311,20 +306,16 @@
                 dashboard.classList.add('hidden');
                 loginScreen.classList.remove('hidden');
                 sessionStorage.removeItem('adminLoggedIn');
-                sessionStorage.removeItem('currentPassHash'); // Clear session password hash
+                sessionStorage.removeItem('currentPassHash');
 
-                // Clear login form
                 document.getElementById('admin-id').value = "";
                 document.getElementById('admin-password').value = "";
-                document.getElementById('admin-secret').value = "";
                 document.getElementById('login-error').classList.add('hidden');
 
-                // Clear settings form
                 const settingsBtn = document.getElementById('save-settings-btn');
                 if (settingsBtn) {
                     document.getElementById('setting-admin-id').value = "";
                     document.getElementById('setting-admin-password').value = "";
-                    document.getElementById('setting-admin-secret').value = "";
                     document.getElementById('setting-current-password').value = "";
                     document.getElementById('settings-error').classList.add('hidden');
                     document.getElementById('settings-success').classList.add('hidden');
@@ -333,40 +324,76 @@
                 }
             }
 
-            // Updated Login Button Logic
+            // --- LOGIN / REGISTER / LOGOUT LOGIC ---
+            document.getElementById('register-btn').addEventListener('click', async () => {
+                const idInput = document.getElementById('register-id').value.trim();
+                const passInput = document.getElementById('register-password').value;
+                const confirmPassInput = document.getElementById('register-confirm-password').value;
+                const registerError = document.getElementById('register-error');
+
+                if (!idInput || !passInput || !confirmPassInput) {
+                    registerError.textContent = "All fields are required.";
+                    return registerError.classList.remove('hidden');
+                }
+                if (passInput !== confirmPassInput) {
+                    registerError.textContent = "Passwords do not match.";
+                    return registerError.classList.remove('hidden');
+                }
+                registerError.classList.add('hidden');
+
+                try {
+                    const hashedPass = await hashString(passInput);
+                    await db.collection("admin").doc("credentials").set({
+                        adminId: idInput,
+                        passHash: hashedPass,
+                    });
+                    alert("Admin registration successful! You can now log in.");
+                    registerScreen.classList.add('hidden');
+                    loginScreen.classList.remove('hidden');
+                } catch (error) {
+                    console.error("Error creating admin:", error);
+                    registerError.textContent = "Could not create admin. Check console.";
+                    registerError.classList.remove('hidden');
+                }
+            });
+
             document.getElementById('login-btn').addEventListener('click', async () => {
                 const idInput = document.getElementById('admin-id').value;
                 const passInput = document.getElementById('admin-password').value;
-                const secretInput = document.getElementById('admin-secret').value;
                 const loginError = document.getElementById('login-error');
 
-                const storedCreds = await getAdminCredentials();
-                if (!storedCreds) {
-                    loginError.textContent = "Error: Could not verify credentials. Check Firestore rules.";
-                    loginError.classList.remove('hidden');
-                    return;
-                }
+                try {
+                    const docRef = db.collection("admin").doc("credentials");
+                    const doc = await docRef.get();
+                    if (!doc.exists) {
+                        loginError.textContent = "No admin account found.";
+                        return loginError.classList.remove('hidden');
+                    }
 
-                const hashedPassInput = await hashString(passInput);
-                const hashedSecretInput = await hashString(secretInput);
-                
-                if (idInput === storedCreds.adminId && 
-                    hashedPassInput === storedCreds.passHash && 
-                    hashedSecretInput === storedCreds.secretHash) 
-                {
-                    sessionStorage.setItem('adminLoggedIn', 'true');
-                    sessionStorage.setItem('currentPassHash', hashedPassInput); // Store hash for settings validation
-                    showDashboard();
-                } else {
-                    loginError.textContent = "Invalid credentials. Please try again.";
+                    const storedCreds = doc.data();
+                    const hashedPassInput = await hashString(passInput);
+                    
+                    if (idInput === storedCreds.adminId && hashedPassInput === storedCreds.passHash) {
+                        sessionStorage.setItem('adminLoggedIn', 'true');
+                        sessionStorage.setItem('currentPassHash', hashedPassInput);
+                        showDashboard();
+                    } else {
+                        loginError.textContent = "Invalid credentials. Please try again.";
+                        loginError.classList.remove('hidden');
+                    }
+                } catch (error) {
+                    loginError.textContent = "Error verifying credentials.";
                     loginError.classList.remove('hidden');
                 }
             });
 
             document.getElementById('logout-btn').addEventListener('click', showLogin);
             
+            // --- PAGE LOAD CHECK ---
             if (sessionStorage.getItem('adminLoggedIn') === 'true') {
                 showDashboard();
+            } else {
+                checkAdminExists();
             }
 
             // --- DASHBOARD INITIALIZATION ---
@@ -472,7 +499,7 @@
                 };
 
                 const renderTopCitiesList = (initial = false) => {
-                    if (initial) state.topCitiesOffset = 10; // Show more by default
+                    if (initial) state.topCitiesOffset = 10;
                     const cityCounts = state.filteredVotes.reduce((acc, { city }) => { acc[city || 'Unknown'] = (acc[city || 'Unknown'] || 0) + 1; return acc; }, {});
                     const sortedCities = Object.entries(cityCounts).sort((a, b) => b[1] - a[1]);
                     const citiesToShow = sortedCities.slice(0, state.topCitiesOffset);
@@ -532,13 +559,13 @@
                     feather.replace(); 
                 }));
                 
-                // Pagination
+                // Pagination & Interaction
                 document.getElementById('prev-page').addEventListener('click', () => { if (state.votersCurrentPage > 1) { state.votersCurrentPage--; renderVotersTable(); } });
                 document.getElementById('next-page').addEventListener('click', () => { if (state.votersCurrentPage * state.votersPerPage < state.filteredVotes.length) { state.votersCurrentPage++; renderVotersTable(); } });
                 document.getElementById('search-voters').addEventListener('input', e => { state.searchTerm = e.target.value.toLowerCase(); state.votersCurrentPage = 1; render(); });
                 document.getElementById('load-more-cities').addEventListener('click', () => { state.topCitiesOffset += 10; renderTopCitiesList(); });
                 
-                // --- MODIFIED PDF DOWNLOAD (ANALYTICS ONLY) ---
+                // PDF DOWNLOAD
                 document.getElementById('download-pdf-btn').addEventListener('click', () => {
                     const { jsPDF } = window.jspdf;
                     const doc = new jsPDF();
@@ -546,78 +573,32 @@
                     const dateRangeText = `Date Range: ${start ? start.toLocaleDateString() : 'All Time'} - ${end ? end.toLocaleDateString() : 'Now'}`;
                     const haaVotes = state.filteredPolls.filter(p => p.choice === 'HAA').length;
                     const mayaVotes = state.filteredPolls.filter(p => p.choice === 'MAYA').length;
-                    let finalY = 0; // To track Y position
+                    let finalY = 0;
 
-                    // Title and Date
-                    doc.setFontSize(18);
-                    doc.text("Campaign Analytics Report", 14, 22);
-                    doc.setFontSize(11);
-                    doc.setTextColor(100);
-                    doc.text(dateRangeText, 14, 29);
-
-                    // Key Metrics
-                    doc.setFontSize(12);
-                    doc.setTextColor(0);
-                    doc.text("Key Metrics", 14, 45);
-                    doc.autoTable({
-                        startY: 50,
-                        theme: 'plain',
-                        bodyStyles: { fontSize: 11 },
-                        body: [
-                            ['Total Votes:', state.filteredVotes.length.toLocaleString()],
-                            ['Total Page Views:', state.filteredViews.length.toLocaleString()],
-                            ['Unique Visitors:', new Set(state.filteredViews.map(v => v.visitorId)).size.toLocaleString()],
-                        ],
-                    });
-                    
+                    doc.setFontSize(18); doc.text("Campaign Analytics Report", 14, 22);
+                    doc.setFontSize(11); doc.setTextColor(100); doc.text(dateRangeText, 14, 29);
+                    doc.setFontSize(12); doc.setTextColor(0); doc.text("Key Metrics", 14, 45);
+                    doc.autoTable({ startY: 50, theme: 'plain', bodyStyles: { fontSize: 11 }, body: [
+                        ['Total Votes:', state.filteredVotes.length.toLocaleString()],
+                        ['Total Page Views:', state.filteredViews.length.toLocaleString()],
+                        ['Unique Visitors:', new Set(state.filteredViews.map(v => v.visitorId)).size.toLocaleString()],
+                    ]});
                     finalY = doc.lastAutoTable.finalY;
-
-                    // Poll Results
-                    doc.setFontSize(12);
-                    doc.text("Quick Poll Results", 14, finalY + 10);
-                    doc.autoTable({
-                        startY: finalY + 15,
-                        theme: 'plain',
-                        bodyStyles: { fontSize: 11 },
-                        body: [
-                            ['"HAA" (Yes) Votes:', haaVotes.toLocaleString()],
-                            ['"MAYA" (No) Votes:', mayaVotes.toLocaleString()],
-                        ],
-                    });
-                    
+                    doc.setFontSize(12); doc.text("Quick Poll Results", 14, finalY + 10);
+                    doc.autoTable({ startY: finalY + 15, theme: 'plain', bodyStyles: { fontSize: 11 }, body: [
+                        ['"HAA" (Yes) Votes:', haaVotes.toLocaleString()],
+                        ['"MAYA" (No) Votes:', mayaVotes.toLocaleString()],
+                    ]});
                     finalY = doc.lastAutoTable.finalY;
-
-                    // Top 5 Countries
                     const countryCounts = state.filteredVotes.reduce((acc, { country }) => { acc[country || 'Unknown'] = (acc[country || 'Unknown'] || 0) + 1; return acc; }, {});
                     const sortedCountries = Object.entries(countryCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-                    
-                    doc.setFontSize(12);
-                    doc.text("Top 5 Countries (by Voters)", 14, finalY + 15);
-                    doc.autoTable({
-                        startY: finalY + 20,
-                        theme: 'striped',
-                        headStyles: { fillColor: [37, 99, 235] }, // blue-600
-                        head: [['Country', 'Votes']],
-                        body: sortedCountries.map(([country, count]) => [country, count.toLocaleString()]),
-                    });
-
+                    doc.setFontSize(12); doc.text("Top 5 Countries (by Voters)", 14, finalY + 15);
+                    doc.autoTable({ startY: finalY + 20, theme: 'striped', headStyles: { fillColor: [37, 99, 235] }, head: [['Country', 'Votes']], body: sortedCountries.map(([c, n]) => [c, n.toLocaleString()]) });
                     finalY = doc.lastAutoTable.finalY;
-
-                    // Top 5 Cities
                     const cityCounts = state.filteredVotes.reduce((acc, { city }) => { acc[city || 'Unknown'] = (acc[city || 'Unknown'] || 0) + 1; return acc; }, {});
                     const sortedCities = Object.entries(cityCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-
-                    doc.setFontSize(12);
-                    doc.text("Top 5 Cities (by Voters)", 14, finalY + 15);
-                    doc.autoTable({
-                        startY: finalY + 20,
-                        theme: 'striped',
-                        headStyles: { fillColor: [37, 99, 235] }, // blue-600
-                        head: [['City', 'Votes']],
-                        body: sortedCities.map(([city, count]) => [city, count.toLocaleString()]),
-                    });
-
-                    // Save the PDF
+                    doc.setFontSize(12); doc.text("Top 5 Cities (by Voters)", 14, finalY + 15);
+                    doc.autoTable({ startY: finalY + 20, theme: 'striped', headStyles: { fillColor: [37, 99, 235] }, head: [['City', 'Votes']], body: sortedCities.map(([c, n]) => [c, n.toLocaleString()]) });
                     doc.save(`campaign-analytics-report-${new Date().toISOString().split('T')[0]}.pdf`);
                 });
 
@@ -625,7 +606,6 @@
                 document.getElementById('save-settings-btn').addEventListener('click', async () => {
                     const newId = document.getElementById('setting-admin-id').value.trim();
                     const newPass = document.getElementById('setting-admin-password').value;
-                    const newSecret = document.getElementById('setting-admin-secret').value;
                     const currentPass = document.getElementById('setting-current-password').value;
 
                     const errorEl = document.getElementById('settings-error');
@@ -635,19 +615,17 @@
                     errorEl.classList.add('hidden');
                     successEl.classList.add('hidden');
 
-                    if (!newId || !newPass || !newSecret || !currentPass) {
+                    if (!newId || !newPass || !currentPass) {
                         errorEl.textContent = "All fields are required.";
-                        errorEl.classList.remove('hidden');
-                        return;
+                        return errorEl.classList.remove('hidden');
                     }
 
                     const currentPassHash = await hashString(currentPass);
                     const sessionPassHash = sessionStorage.getItem('currentPassHash');
 
                     if (currentPassHash !== sessionPassHash) {
-                        errorEl.textContent = "Your 'Current Password' is incorrect. Cannot save changes.";
-                        errorEl.classList.remove('hidden');
-                        return;
+                        errorEl.textContent = "Your 'Current Password' is incorrect.";
+                        return errorEl.classList.remove('hidden');
                     }
 
                     saveBtn.disabled = true;
@@ -655,25 +633,19 @@
 
                     try {
                         const newPassHash = await hashString(newPass);
-                        const newSecretHash = await hashString(newSecret);
-                        const docRef = db.collection("admin").doc("credentials");
-
-                        await docRef.set({
+                        await db.collection("admin").doc("credentials").set({
                             adminId: newId,
                             passHash: newPassHash,
-                            secretHash: newSecretHash
                         });
 
-                        successEl.textContent = "Credentials updated successfully. Logging you out...";
+                        successEl.textContent = "Credentials updated successfully. Logging out...";
                         successEl.classList.remove('hidden');
 
-                        setTimeout(() => {
-                            showLogin();
-                        }, 2000);
+                        setTimeout(showLogin, 2000);
 
                     } catch (error) {
                         console.error("Error updating credentials: ", error);
-                        errorEl.textContent = "An error occurred while saving. Please try again.";
+                        errorEl.textContent = "An error occurred while saving.";
                         errorEl.classList.remove('hidden');
                         saveBtn.disabled = false;
                         saveBtn.textContent = "Save Changes & Logout";
@@ -685,31 +657,12 @@
                 const sidebarToggle = document.getElementById('mobile-sidebar-toggle');
                 const sidebarOverlay = document.getElementById('sidebar-overlay');
                 
-                function openSidebar() {
-                    sidebar.classList.remove('-translate-x-full');
-                    sidebarOverlay.classList.remove('hidden');
-                }
+                const openSidebar = () => { sidebar.classList.remove('-translate-x-full'); sidebarOverlay.classList.remove('hidden'); };
+                const closeSidebar = () => { sidebar.classList.add('-translate-x-full'); sidebarOverlay.classList.add('hidden'); };
 
-                function closeSidebar() {
-                    sidebar.classList.add('-translate-x-full');
-                    sidebarOverlay.classList.add('hidden');
-                }
-
-                sidebarToggle?.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    openSidebar();
-                });
-
+                sidebarToggle?.addEventListener('click', (e) => { e.stopPropagation(); openSidebar(); });
                 sidebarOverlay?.addEventListener('click', closeSidebar);
-
-                // Close sidebar when a link is clicked on mobile
-                sidebar?.querySelectorAll('.sidebar-link').forEach(link => {
-                    link.addEventListener('click', () => {
-                        if (window.innerWidth < 1024) { // 'lg' breakpoint
-                            closeSidebar();
-                        }
-                    });
-                });
+                sidebar?.querySelectorAll('.sidebar-link').forEach(link => link.addEventListener('click', () => { if (window.innerWidth < 1024) closeSidebar(); }));
             }
         });
     </script>
